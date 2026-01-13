@@ -4,95 +4,29 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>Two-Team Pinball Skirmish</title>
+  <title>Two-Team Pinball Skirmish — Split & SFX</title>
   <style>
-    /* Full-viewport canvas */
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #0f1223; /* dark spacey backdrop */
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
-      color: #e8ecf1;
-    }
-
-    canvas {
-      display: block;
-      width: 100vw;
-      height: 100vh;
-      cursor: crosshair;
-    }
-
-    /* HUD overlay */
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#0f1223; color:#e8ecf1; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    canvas { display:block; width:100vw; height:100vh; cursor:crosshair; }
     .hud {
-      position: fixed;
-      left: 12px;
-      top: 12px;
-      z-index: 10;
-      background: rgba(8, 12, 24, 0.6);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 10px;
-      padding: 10px 12px;
-      backdrop-filter: saturate(150%) blur(4px);
-      user-select: none;
+      position: fixed; left: 12px; top: 12px; z-index: 10;
+      background: rgba(8,12,24,.6); border:1px solid rgba(255,255,255,.12);
+      border-radius:10px; padding:10px 12px; backdrop-filter: saturate(150%) blur(4px); user-select:none;
     }
-    .hud h1 {
-      margin: 0 0 6px;
-      font-size: 16px;
-      letter-spacing: 0.3px;
+    .hud h1 { margin:0 0 6px; font-size:16px; letter-spacing:.3px; }
+    .hud .row { display:flex; gap: 24px; align-items:center; font-size:14px; }
+    .hud .badge { display:inline-block; padding:2px 8px; border-radius:9999px; border:1px solid rgba(255,255,255,.16); font-size:12px; margin-left:6px; }
+    .legend { margin-top:6px; font-size:12px; line-height:1.35; opacity:.8; }
+    .goal-left, .goal-right { position:fixed; top:0; width:12px; height:100vh; z-index:5; pointer-events:none; opacity:.3; }
+    .goal-left  { left:0;  background: linear-gradient(180deg, #00b2ff55, #00b2ff00); }
+    .goal-right { right:0; background: linear-gradient(180deg, #ff4d4d55, #ff4d4d00); }
+    .difficulty { margin-top:8px; display:flex; gap:8px; }
+    .difficulty button, .sfx button {
+      background:#1a2144; color:#e8ecf1; border:1px solid rgba(255,255,255,.16);
+      border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer;
     }
-    .hud .row {
-      display: flex;
-      gap: 24px;
-      font-size: 14px;
-      align-items: center;
-    }
-    .hud .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 9999px;
-      border: 1px solid rgba(255,255,255,0.16);
-      font-size: 12px;
-      margin-left: 6px;
-    }
-    .legend {
-      margin-top: 6px;
-      font-size: 12px;
-      line-height: 1.35;
-      opacity: 0.8;
-    }
-
-    /* Goal lines */
-    .goal-left, .goal-right {
-      position: fixed;
-      top: 0;
-      width: 12px;
-      height: 100vh;
-      z-index: 5;
-      pointer-events: none;
-      opacity: 0.3;
-    }
-    .goal-left { left: 0; background: linear-gradient(180deg, #00b2ff55, #00b2ff00); }
-    .goal-right { right: 0; background: linear-gradient(180deg, #ff4d4d55, #ff4d4d00); }
-
-    /* Difficulty control (optional quick toggles) */
-    .difficulty {
-      margin-top: 8px;
-      display: flex;
-      gap: 8px;
-    }
-    .difficulty button {
-      background: #1a2144;
-      color: #e8ecf1;
-      border: 1px solid rgba(255,255,255,0.16);
-      border-radius: 8px;
-      padding: 6px 10px;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    .difficulty button:hover { background: #23306b; }
+    .difficulty button:hover, .sfx button:hover { background:#23306b; }
+    .sfx { margin-top:8px; display:flex; gap:8px; align-items:center; }
   </style>
 </head>
 <body>
@@ -106,13 +40,17 @@
       <div>Active Objects: <span id="activeCount" class="badge">0</span></div>
     </div>
     <div class="legend">
-      Mouse/Touch: drag from the <strong>left edge</strong> to set angle &amp; power, release to launch.<br />
-      <strong>E</strong>/<strong>M</strong>/<strong>H</strong>: difficulty presets (Easy/Medium/Hard). <strong>Space</strong>: pause. <strong>R</strong>: reset.
+      Drag from the <strong>left edge</strong> to aim &amp; set power, release to launch.<br/>
+      Big balls <strong>split into smaller balls</strong> when they explode.<br/>
+      Keys: <strong>E</strong>/<strong>M</strong>/<strong>H</strong> difficulty, <strong>Space</strong> pause, <strong>R</strong> reset.
     </div>
     <div class="difficulty">
       <button data-diff="easy">Easy</button>
       <button data-diff="medium">Medium</button>
       <button data-diff="hard">Hard</button>
+    </div>
+    <div class="sfx">
+      <button id="toggleSfx">Sound: On</button>
     </div>
   </div>
   <canvas id="game"></canvas>
@@ -123,47 +61,64 @@
     // =========================
     const CONFIG = {
       general: {
-        friction: 0.00025,     // slows over time (per ms)
-        gravity: 0,            // you can set gravity if desired
-        bounceDamping: 0.92,   // velocity retained after a bounce
-        maxObjects: 200,       // global cap on live objects
+        friction: 0.00025,
+        gravity: 0,
+        bounceDamping: 0.92,
+        maxObjects: 260,
         popOnOppositeCollision: true,
-        goalPaddingPx: 6,      // how far inside the edge counts as "goal"
-        dprScale: true,        // use devicePixelRatio for crisp rendering
-        trail: false           // set true to draw motion trails
+        goalPaddingPx: 6,
+        dprScale: true,
+        trail: false
+      },
+      sfx: {
+        enabled: true,
+        masterVolume: 0.6,
+        explosionPanStrength: 1.0 // 1 => full stereo based on x position
+      },
+      split: {
+        enabled: true,
+        minParentRadius: 16,   // balls >= this radius will split
+        children: 3,           // spawn this many child balls
+        childRadius: 10,       // radius of children
+        childSpeedMin: 140,    // outward burst speed range
+        childSpeedMax: 280,
+        inheritMomentum: 0.4,  // fraction of parent's velocity added to children
+        popOnSplit: true       // draw pop fx at parent center on split
       },
       human: {
         color: "#00b2ff",
-        radius: 12,
-        maxPowerPx: 360,       // maximum arrow length for launch power
-        powerToSpeed: 2.2,     // scales arrow length -> initial speed (px/s)
-        cooldownMs: 120,       // minimum time between launches
-        batch: 1,              // how many objects per launch
-        spread: 0.04,          // random angle spread per batch
-        spawnSide: "left"      // anchor side for human launch
+        radiusMin: 10,
+        radiusMax: 20,         // allows "big" human shots sometimes
+        maxPowerPx: 360,
+        powerToSpeed: 2.2,
+        cooldownMs: 120,
+        batch: 1,
+        spread: 0.04,
+        spawnSide: "left"
       },
       bot: {
         color: "#ff4d4d",
-        radius: 12,
-        spawnIntervalMs: 900,  // time between bot bursts
-        burstSize: 2,          // how many per burst
-        minSpeed: 180,         // initial speed range
+        radiusMin: 10,
+        radiusMax: 22,         // allows big bot balls more often
+        spawnIntervalMs: 900,
+        burstSize: 2,
+        minSpeed: 180,
         maxSpeed: 520,
-        varianceAngle: 0.50,   // random angle off "toward the other side"
-        spawnSide: "right"     // anchor side for bot launch
+        varianceAngle: 0.50,
+        spawnSide: "right"
       },
       presets: {
         easy: {
-          human: { maxPowerPx: 380, batch: 2, spread: 0.03 },
-          bot:   { spawnIntervalMs: 1200, burstSize: 1, minSpeed: 160, maxSpeed: 360, varianceAngle: 0.45 }
+          human: { maxPowerPx: 380, batch: 2, spread: 0.03, radiusMax: 22 },
+          bot:   { spawnIntervalMs: 1200, burstSize: 1, minSpeed: 160, maxSpeed: 360, varianceAngle: 0.45, radiusMax: 20 }
         },
         medium: {
-          human: { maxPowerPx: 340, batch: 1, spread: 0.04 },
-          bot:   { spawnIntervalMs: 900, burstSize: 2, minSpeed: 200, maxSpeed: 520, varianceAngle: 0.50 }
+          human: { maxPowerPx: 340, batch: 1, spread: 0.04, radiusMax: 20 },
+          bot:   { spawnIntervalMs: 900, burstSize: 2, minSpeed: 200, maxSpeed: 520, varianceAngle: 0.50, radiusMax: 22 }
         },
         hard: {
-          human: { maxPowerPx: 300, batch: 1, spread: 0.06 },
-          bot:   { spawnIntervalMs: 650, burstSize: 3, minSpeed: 280, maxSpeed: 680, varianceAngle: 0.65 }
+          human: { maxPowerPx: 300, batch: 1, spread: 0.06, radiusMax: 18 },
+          bot:   { spawnIntervalMs: 650, burstSize: 3, minSpeed: 280, maxSpeed: 680, varianceAngle: 0.65, radiusMax: 24 }
         }
       }
     };
@@ -180,13 +135,90 @@
       dpr = CONFIG.general.dprScale ? (window.devicePixelRatio || 1) : 1;
       W = Math.floor(window.innerWidth * dpr);
       H = Math.floor(window.innerHeight * dpr);
-      canvas.width = W;
-      canvas.height = H;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      canvas.width = W; canvas.height = H;
+      ctx.setTransform(1,0,0,1,0,0);
       ctx.scale(dpr, dpr);
     }
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
+
+    // =========================
+    // Audio (WebAudio Synth)
+    // =========================
+    class Sound {
+      constructor() {
+        this.enabled = CONFIG.sfx.enabled;
+        this.ctx = null;
+        this.noiseBuffer = null;
+        this.masterVol = CONFIG.sfx.masterVolume;
+      }
+      ensureContext() {
+        if (!this.ctx) {
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+          // Create a small white-noise buffer for explosion texture
+          const length = this.ctx.sampleRate * 0.25; // 250ms
+          const buffer = this.ctx.createBuffer(1, length, this.ctx.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1);
+          this.noiseBuffer = buffer;
+        }
+        if (this.ctx.state === "suspended") this.ctx.resume();
+      }
+      toggle() {
+        this.enabled = !this.enabled;
+      }
+      playExplosion(xCss) {
+        if (!this.enabled) return;
+        this.ensureContext();
+        const ac = this.ctx;
+        const now = ac.currentTime;
+
+        // Stereo pan based on x position (CSS pixels)
+        const panNode = ac.createStereoPanner();
+        const x = xCss / (canvas.width / dpr);
+        panNode.pan.value = (x * 2 - 1) * CONFIG.sfx.explosionPanStrength;
+
+        // Noise burst -> filter -> gain
+        const noise = ac.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+
+        const filter = ac.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.setValueAtTime(600, now);
+        filter.Q.setValueAtTime(0.6, now);
+
+        const nGain = ac.createGain();
+        nGain.gain.setValueAtTime(this.masterVol * 0.45, now);
+        nGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+
+        noise.connect(filter).connect(nGain).connect(panNode).connect(ac.destination);
+
+        // Low "thump" oscillator for body
+        const osc = ac.createOscillator();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.exponentialRampToValueAtTime(60, now + 0.28);
+
+        const oGain = ac.createGain();
+        oGain.gain.setValueAtTime(this.masterVol * 0.35, now);
+        oGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+
+        osc.connect(oGain).connect(panNode);
+
+        noise.start(now);
+        noise.stop(now + 0.25);
+        osc.start(now);
+        osc.stop(now + 0.32);
+      }
+    }
+    const SFX = new Sound();
+    const toggleSfxBtn = document.getElementById("toggleSfx");
+    toggleSfxBtn.addEventListener("click", () => {
+      SFX.toggle();
+      toggleSfxBtn.textContent = `Sound: ${SFX.enabled ? "On" : "Off"}`;
+    });
+    // Unlock audio on first interaction
+    window.addEventListener("pointerdown", () => SFX.ensureContext(), { once: true });
 
     // =========================
     // Game Entities
@@ -207,7 +239,7 @@
         const friction = CONFIG.general.friction;
         const grav = CONFIG.general.gravity;
 
-        // Apply friction (proportional to dt)
+        // Friction
         const speed = Math.hypot(this.vx, this.vy);
         if (speed > 0) {
           const decel = friction * dt * speed;
@@ -223,37 +255,38 @@
         this.x += this.vx * dt / 1000;
         this.y += this.vy * dt / 1000;
 
-        // Bounce off top/bottom
+        // Bounce top/bottom
+        const h = canvas.height / dpr;
         if (this.y - this.radius < 0) {
           this.y = this.radius;
           this.vy = -this.vy * CONFIG.general.bounceDamping;
-        } else if (this.y + this.radius > canvas.height / dpr) {
-          this.y = (canvas.height / dpr) - this.radius;
+        } else if (this.y + this.radius > h) {
+          this.y = h - this.radius;
           this.vy = -this.vy * CONFIG.general.bounceDamping;
         }
 
-        // Goal detection: reaching the far side disappears & scores
+        // Goal detection
         const pad = CONFIG.general.goalPaddingPx;
+        const w = canvas.width / dpr;
         if (this.team === TEAM.HUMAN) {
-          // Human tries to reach RIGHT side
-          if (this.x + this.radius >= (canvas.width / dpr) - pad) {
+          if (this.x + this.radius >= w - pad) {
+            // Human reaches right goal
             scoreHuman++;
+            explodeBall(this, "goal");
             this.alive = false;
-            spawnPop(this.x, this.y, this.color);
           }
         } else {
-          // Bot tries to reach LEFT side
           if (this.x - this.radius <= pad) {
+            // Bot reaches left goal
             scoreBot++;
+            explodeBall(this, "goal");
             this.alive = false;
-            spawnPop(this.x, this.y, this.color);
           }
         }
 
         this.age += dt;
       }
       draw(ctx) {
-        // Ball
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
@@ -261,12 +294,10 @@
         ctx.shadowBlur = 12;
         ctx.fill();
 
-        // Subtle outline
         ctx.lineWidth = 2;
         ctx.strokeStyle = "#ffffff20";
         ctx.stroke();
 
-        // Optional trailing indicator
         if (CONFIG.general.trail) {
           ctx.beginPath();
           ctx.moveTo(this.x, this.y);
@@ -278,19 +309,13 @@
       }
     }
 
-    // Simple pop/explosion effect
+    // Pop FX
     class Pop {
       constructor(x, y, color) {
-        this.x = x; this.y = y;
-        this.color = color;
-        this.life = 400; // ms
-        this.age = 0;
-        this.r = 8;
+        this.x = x; this.y = y; this.color = color;
+        this.life = 400; this.age = 0; this.r = 8;
       }
-      update(dt) {
-        this.age += dt;
-        this.r += dt * 0.04;
-      }
+      update(dt) { this.age += dt; this.r += dt * 0.04; }
       draw(ctx) {
         const t = Math.min(1, this.age / this.life);
         const alpha = 1 - t;
@@ -320,8 +345,63 @@
     function spawnPop(x, y, color) {
       pops.push(new Pop(x, y, color));
     }
-
     function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+    // Team radius helpers (to create "big" balls sometimes)
+    function randomTeamRadius(team) {
+      if (team === TEAM.HUMAN) {
+        const { radiusMin, radiusMax } = CONFIG.human;
+        return radiusMin + Math.random() * (radiusMax - radiusMin);
+      } else {
+        const { radiusMin, radiusMax } = CONFIG.bot;
+        return radiusMin + Math.random() * (radiusMax - radiusMin);
+      }
+    }
+
+    // =========================
+    // Splitting & Explosions
+    // =========================
+    function explodeBall(ball, cause = "collision") {
+      // Visual pop & sound
+      spawnPop(ball.x, ball.y, ball.color);
+      SFX.playExplosion(ball.x);
+
+      // Split into children if large enough
+      if (CONFIG.split.enabled && ball.radius >= CONFIG.split.minParentRadius) {
+        splitBall(ball);
+      }
+    }
+
+    function splitBall(parent) {
+      const n = CONFIG.split.children;
+      const childR = CONFIG.split.childRadius;
+      const speedMin = CONFIG.split.childSpeedMin;
+      const speedMax = CONFIG.split.childSpeedMax;
+      const inherit = CONFIG.split.inheritMomentum;
+
+      for (let i = 0; i < n; i++) {
+        const angle = (Math.PI * 2 * (i / n)) + ((Math.random() - 0.5) * 0.6); // slight randomness
+        const speed = speedMin + Math.random() * (speedMax - speedMin);
+        const vx = Math.cos(angle) * speed + parent.vx * inherit;
+        const vy = Math.sin(angle) * speed + parent.vy * inherit;
+
+        // Small position offset to reduce immediate re-collision
+        const offset = parent.radius * 0.35;
+        const cx = parent.x + Math.cos(angle) * offset;
+        const cy = parent.y + Math.sin(angle) * offset;
+
+        spawnBall(cx, cy, vx, vy, parent.team, childR, parent.color);
+      }
+
+      if (CONFIG.split.popOnSplit) {
+        spawnPop(parent.x, parent.y, "#ffffff");
+      }
+    }
+
+    function spawnBall(x, y, vx, vy, team, radius, color) {
+      if (balls.length >= CONFIG.general.maxObjects) return;
+      balls.push(new Ball(x, y, vx, vy, team, radius, color));
+    }
 
     // =========================
     // Collision (Opposing teams)
@@ -338,14 +418,20 @@
           const r = a.radius + b.radius;
           if (dx * dx + dy * dy <= r * r) {
             if (CONFIG.general.popOnOppositeCollision && a.team !== b.team) {
-              // Both disappear on opposing collision
-              a.alive = false;
-              b.alive = false;
+              // Shared pop/sound at midpoint
               const mx = (a.x + b.x) / 2;
               const my = (a.y + b.y) / 2;
               spawnPop(mx, my, "#ffffff");
+              SFX.playExplosion(mx);
+
+              // Individual explosions & splitting
+              explodeBall(a, "collision");
+              explodeBall(b, "collision");
+
+              a.alive = false;
+              b.alive = false;
             } else {
-              // Optional same-team bounce (not required); mild separation
+              // Same-team soft separation
               const dist = Math.max(1, Math.hypot(dx, dy));
               const nx = dx / dist, ny = dy / dist;
               const overlap = r - dist;
@@ -364,28 +450,22 @@
     }
 
     // =========================
-    // Launchers
+    // Launchers (Human + Bot)
     // =========================
     let aiming = false;
-    let aimAnchor = { x: 20, y: canvas.height / (dpr * 2) }; // left-side anchor
+    let aimAnchor = { x: 20, y: canvas.height / (dpr * 2) };
     let aimCurrent = { x: 20, y: canvas.height / (dpr * 2) };
     let lastLaunchTs = 0;
 
     function beginAim(x, y) {
-      // Only begin aiming if near the left edge
-      const pxX = x, pxY = y;
-      const leftZone = 100; // pixels in CSS coords
-      if (pxX <= leftZone) {
-        aimAnchor = { x: 20, y: pxY };
-        aimCurrent = { x: pxX, y: pxY };
+      const leftZone = 100;
+      if (x <= leftZone) {
+        aimAnchor = { x: 20, y };
+        aimCurrent = { x, y };
         aiming = true;
       }
     }
-    function moveAim(x, y) {
-      if (aiming) {
-        aimCurrent = { x, y };
-      }
-    }
+    function moveAim(x, y) { if (aiming) aimCurrent = { x, y }; }
     function endAim() {
       if (!aiming) return;
       aiming = false;
@@ -393,21 +473,18 @@
       if (now - lastLaunchTs < CONFIG.human.cooldownMs) return;
       lastLaunchTs = now;
 
-      // Compute arrow vector (anchor -> current)
       const ax = aimAnchor.x, ay = aimAnchor.y;
       let vx = aimCurrent.x - ax;
       let vy = aimCurrent.y - ay;
-      // Constrain power
       const len = Math.hypot(vx, vy);
       const maxLen = CONFIG.human.maxPowerPx;
       const power = Math.min(len, maxLen);
-      if (power < 8) return; // too weak; ignore
+      if (power < 8) return;
 
       const angle = Math.atan2(vy, vx);
-      const speed = power * CONFIG.human.powerToSpeed; // px/s
-
-      // Spawn batch with slight spread
+      const speed = power * CONFIG.human.powerToSpeed;
       const n = CONFIG.human.batch;
+
       for (let i = 0; i < n; i++) {
         const jitter = (Math.random() - 0.5) * CONFIG.human.spread;
         const a = angle + jitter;
@@ -415,13 +492,9 @@
         const svy = Math.sin(a) * speed;
         const startX = (CONFIG.human.spawnSide === "left") ? (aimAnchor.x + 16) : (canvas.width / dpr - 16);
         const startY = ay;
-        spawnBall(startX, startY, svx, svy, TEAM.HUMAN, CONFIG.human.radius, CONFIG.human.color);
+        const radius = randomTeamRadius(TEAM.HUMAN);
+        spawnBall(startX, startY, svx, svy, TEAM.HUMAN, radius, CONFIG.human.color);
       }
-    }
-
-    function spawnBall(x, y, vx, vy, team, radius, color) {
-      if (balls.length >= CONFIG.general.maxObjects) return;
-      balls.push(new Ball(x, y, vx, vy, team, radius, color));
     }
 
     // Bot spawns periodically
@@ -436,14 +509,14 @@
           const y = (Math.random() * (canvas.height / dpr - 40)) + 20;
           const x = (CONFIG.bot.spawnSide === "right") ? (canvas.width / dpr - 20) : 20;
 
-          // Aim roughly toward the other side, with variance
-          const baseAngle = (CONFIG.bot.spawnSide === "right") ? Math.PI : 0; // leftward or rightward
+          const baseAngle = (CONFIG.bot.spawnSide === "right") ? Math.PI : 0;
           const angle = baseAngle + (Math.random() - 0.5) * CONFIG.bot.varianceAngle;
           const speed = CONFIG.bot.minSpeed + Math.random() * (CONFIG.bot.maxSpeed - CONFIG.bot.minSpeed);
           const vx = Math.cos(angle) * speed;
           const vy = Math.sin(angle) * speed;
 
-          spawnBall(x, y, vx, vy, TEAM.BOT, CONFIG.bot.radius, CONFIG.bot.color);
+          const radius = randomTeamRadius(TEAM.BOT);
+          spawnBall(x, y, vx, vy, TEAM.BOT, radius, CONFIG.bot.color);
         }
       }
     }
@@ -451,56 +524,34 @@
     // =========================
     // Input (Pointer + Keyboard)
     // =========================
-    function toCanvasCoords(clientX, clientY) {
-      // Canvas CSS pixels map directly because we scaled the context
-      return { x: clientX, y: clientY };
-    }
-
-    canvas.addEventListener("pointerdown", (e) => {
-      const p = toCanvasCoords(e.clientX, e.clientY);
-      beginAim(p.x, p.y);
-    });
-    window.addEventListener("pointermove", (e) => {
-      const p = toCanvasCoords(e.clientX, e.clientY);
-      moveAim(p.x, p.y);
-    });
+    function toCanvasCoords(clientX, clientY) { return { x: clientX, y: clientY }; }
+    canvas.addEventListener("pointerdown", (e) => beginAim(...Object.values(toCanvasCoords(e.clientX, e.clientY))));
+    window.addEventListener("pointermove", (e) => moveAim(...Object.values(toCanvasCoords(e.clientX, e.clientY))));
     window.addEventListener("pointerup", () => endAim());
     window.addEventListener("pointercancel", () => { aiming = false; });
 
     window.addEventListener("keydown", (e) => {
-      if (e.key.toLowerCase() === " ") {
-        paused = !paused;
-      } else if (e.key.toLowerCase() === "r") {
-        resetGame();
-      } else if (e.key.toLowerCase() === "e") {
-        applyPreset("easy");
-      } else if (e.key.toLowerCase() === "m") {
-        applyPreset("medium");
-      } else if (e.key.toLowerCase() === "h") {
-        applyPreset("hard");
-      }
+      const k = e.key.toLowerCase();
+      if (k === " ") paused = !paused;
+      else if (k === "r") resetGame();
+      else if (k === "e") applyPreset("easy");
+      else if (k === "m") applyPreset("medium");
+      else if (k === "h") applyPreset("hard");
+      else if (k === "s") { SFX.toggle(); toggleSfxBtn.textContent = `Sound: ${SFX.enabled ? "On" : "Off"}`; }
     });
 
-    difficultyButtons.forEach(btn => {
-      btn.addEventListener("click", () => {
-        applyPreset(btn.dataset.diff);
-      });
-    });
+    difficultyButtons.forEach(btn => btn.addEventListener("click", () => applyPreset(btn.dataset.diff)));
 
     function applyPreset(name) {
-      const p = CONFIG.presets[name];
-      if (!p) return;
+      const p = CONFIG.presets[name]; if (!p) return;
       Object.assign(CONFIG.human, p.human);
       Object.assign(CONFIG.bot, p.bot);
-      // Stagger next bot spawn for smoother transition
       nextBotSpawn = performance.now() + CONFIG.bot.spawnIntervalMs;
     }
 
     function resetGame() {
-      balls = [];
-      pops = [];
-      scoreHuman = 0;
-      scoreBot = 0;
+      balls = []; pops = [];
+      scoreHuman = 0; scoreBot = 0;
       paused = false;
       nextBotSpawn = performance.now() + CONFIG.bot.spawnIntervalMs;
     }
@@ -513,22 +564,18 @@
       const dt = ts - lastTs;
       lastTs = ts;
 
-      // Update spawner
       botSpawner(ts);
 
-      // Update entities
       if (!paused) {
         for (const b of balls) { if (b.alive) b.update(dt); }
         handleCollisions();
         balls = balls.filter(b => b.alive);
-        for (const p of pops) { p.update(dt); }
+        for (const p of pops) p.update(dt);
         pops = pops.filter(p => p.alive);
       }
 
-      // Render
       draw();
 
-      // HUD
       scoreHumanEl.textContent = String(scoreHuman);
       scoreBotEl.textContent = String(scoreBot);
       activeEl.textContent = String(balls.length);
@@ -539,83 +586,45 @@
 
     function drawBackground(ctx) {
       const w = canvas.width / dpr, h = canvas.height / dpr;
-      // Subtle vignette gradient background
       const g = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, Math.max(w, h)/1.2);
-      g.addColorStop(0, "#0f1223");
-      g.addColorStop(1, "#0b0e1b");
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
-
-      // Center line (just for reference)
-      ctx.strokeStyle = "#ffffff10";
-      ctx.setLineDash([6, 6]);
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(w / 2, 0);
-      ctx.lineTo(w / 2, h);
-      ctx.stroke();
+      g.addColorStop(0, "#0f1223"); g.addColorStop(1, "#0b0e1b");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "#ffffff10"; ctx.setLineDash([6,6]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(w/2, 0); ctx.lineTo(w/2, h); ctx.stroke();
       ctx.setLineDash([]);
     }
-
     function drawAim(ctx) {
       if (!aiming) return;
-      // Arrow from anchor to current
       const ax = aimAnchor.x, ay = aimAnchor.y;
       const cx = aimCurrent.x, cy = aimCurrent.y;
       let dx = cx - ax, dy = cy - ay;
-      const len = Math.hypot(dx, dy);
-      if (len < 1) return;
+      const len = Math.hypot(dx, dy); if (len < 1) return;
       const maxLen = CONFIG.human.maxPowerPx;
       const clampedLen = Math.min(len, maxLen);
       const ux = dx / len, uy = dy / len;
-      const tipX = ax + ux * clampedLen;
-      const tipY = ay + uy * clampedLen;
+      const tipX = ax + ux * clampedLen, tipY = ay + uy * clampedLen;
 
-      // Line
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = CONFIG.human.color;
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(tipX, tipY);
-      ctx.stroke();
+      ctx.lineWidth = 4; ctx.strokeStyle = CONFIG.human.color;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(tipX, tipY); ctx.stroke();
 
-      // Arrow head
       const headSize = 10;
       const angle = Math.atan2(uy, ux);
       ctx.beginPath();
       ctx.moveTo(tipX, tipY);
       ctx.lineTo(tipX - Math.cos(angle - Math.PI/6) * headSize, tipY - Math.sin(angle - Math.PI/6) * headSize);
       ctx.lineTo(tipX - Math.cos(angle + Math.PI/6) * headSize, tipY - Math.sin(angle + Math.PI/6) * headSize);
-      ctx.closePath();
-      ctx.fillStyle = CONFIG.human.color;
-      ctx.fill();
+      ctx.closePath(); ctx.fillStyle = CONFIG.human.color; ctx.fill();
 
-      // Power meter (clamped)
       const powerPct = clampedLen / maxLen;
-      ctx.fillStyle = "#ffffff33";
-      ctx.fillRect(8, 8, 120, 8);
-      ctx.fillStyle = CONFIG.human.color;
-      ctx.fillRect(8, 8, 120 * powerPct, 8);
-      ctx.strokeStyle = "#ffffff66";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(8, 8, 120, 8);
+      ctx.fillStyle = "#ffffff33"; ctx.fillRect(8, 8, 120, 8);
+      ctx.fillStyle = CONFIG.human.color; ctx.fillRect(8, 8, 120 * powerPct, 8);
+      ctx.strokeStyle = "#ffffff66"; ctx.lineWidth = 1; ctx.strokeRect(8, 8, 120, 8);
     }
-
     function draw() {
       ctx.save();
       drawBackground(ctx);
-
-      // Balls
-      for (const b of balls) {
-        b.draw(ctx);
-      }
-
-      // Pops
-      for (const p of pops) {
-        p.draw(ctx);
-      }
-
-      // Aim overlay
+      for (const b of balls) b.draw(ctx);
+      for (const p of pops) p.draw(ctx);
       drawAim(ctx);
       ctx.restore();
     }
